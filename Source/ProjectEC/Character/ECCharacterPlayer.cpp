@@ -30,7 +30,7 @@ AECCharacterPlayer::AECCharacterPlayer()
 	GetMesh()->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -100.f), FRotator(0.f, -90.f, 0.f));
 	GetMesh()->SetCollisionProfileName("CharacterMesh");
 
-	static::ConstructorHelpers::FObjectFinder<USkeletalMesh> PlayerMeshRef(TEXT("/Script/Engine.SkeletalMesh'/Game/Characters/Mannequin_UE4/Meshes/SK_Mannequin.SK_Mannequin'"));
+	static::ConstructorHelpers::FObjectFinder<USkeletalMesh> PlayerMeshRef(TEXT("/Script/Engine.SkeletalMesh'/Game/ECPlayer/Mannequin_UE4/Meshes/SK_Mannequin.SK_Mannequin'"));
 	if (PlayerMeshRef.Object)
 	{
 		GetMesh()->SetSkeletalMesh(PlayerMeshRef.Object);
@@ -74,13 +74,7 @@ void AECCharacterPlayer::BeginPlay()
 {
 	// Call the base class  
 	Super::BeginPlay();
-}
 
-//////////////////////////////////////////////////////////////////////////
-// Input
-
-void AECCharacterPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
 	// Add Input Mapping Context
 	if (AECPlayerController* PlayerController = Cast<AECPlayerController>(GetController()))
 	{
@@ -89,10 +83,16 @@ void AECCharacterPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 			Subsystem->AddMappingContext(DefaultMappingContext, 0);
 		}
 	}
-	
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Input
+
+void AECCharacterPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
 	// Set up action bindings
-	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
-		
+	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) 
+	{
 		// Jumping
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
@@ -127,8 +127,8 @@ void AECCharacterPlayer::Move(const FInputActionValue& Value)
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
 		// add movement 
-		AddMovementInput(ForwardDirection, MovementVector.Y);
-		AddMovementInput(RightDirection, MovementVector.X);
+		AddMovementInput(ForwardDirection, MovementVector.X);
+		AddMovementInput(RightDirection, MovementVector.Y);
 	}
 }
 
