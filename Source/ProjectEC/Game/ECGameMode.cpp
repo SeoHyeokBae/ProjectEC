@@ -1,26 +1,21 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "Game/ECGameMode.h"
-#include "Player/ECPlayerController.h"
-#include "Character/ECCharacter.h"
+#include "ECGameMode.h"
+#include "../Character/ECCharacterPlayer.h"
 #include "UObject/ConstructorHelpers.h"
 
 AECGameMode::AECGameMode()
 {
-	// use our custom PlayerController class
-	PlayerControllerClass = AECPlayerController::StaticClass();
-
 	// set default pawn class to our Blueprinted character
-	static ConstructorHelpers::FClassFinder<APawn> PlayerPawnBPClass(TEXT("/Game/TopDown/Blueprints/BP_TopDownCharacter"));
-	if (PlayerPawnBPClass.Class != nullptr)
+	static ConstructorHelpers::FClassFinder<APawn> PlayerClassRef(TEXT("/Script/CoreUObject.Class'/Script/ProjectEC.ECCharacterPlayer'"));
+	if (PlayerClassRef.Class != NULL)
 	{
-		DefaultPawnClass = PlayerPawnBPClass.Class;
+		DefaultPawnClass = PlayerClassRef.Class;
 	}
 
-	// set default controller to our Blueprinted controller
-	static ConstructorHelpers::FClassFinder<APlayerController> PlayerControllerBPClass(TEXT("/Game/TopDown/Blueprints/BP_TopDownPlayerController"));
-	if(PlayerControllerBPClass.Class != NULL)
+	static ConstructorHelpers::FClassFinder<APlayerController> PlayerControllerClassRef(TEXT("/Script/CoreUObject.Class'/Script/ProjectEC.ECPlayerController'"));
+	if (PlayerControllerClassRef.Class != NULL)
 	{
-		PlayerControllerClass = PlayerControllerBPClass.Class;
+		PlayerControllerClass = PlayerControllerClassRef.Class;
 	}
 }
