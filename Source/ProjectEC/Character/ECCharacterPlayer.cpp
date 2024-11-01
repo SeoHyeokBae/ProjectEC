@@ -7,6 +7,8 @@
 #include "InputActionValue.h"
 #include "InputMappingContext.h"
 #include "../Player/ECPlayerController.h"
+#include "ECPlayerControlData.h"
+
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -15,12 +17,14 @@ DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
 AECCharacterPlayer::AECCharacterPlayer()
 {
-	
+	PrimaryActorTick.bCanEverTick = true;
+
 	// Create a camera boom (pulls in towards the player if there is a collision)
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->TargetArmLength = 400.0f; // The camera follows at this distance behind the character	
-	CameraBoom->bUsePawnControlRotation = true; // Rotate the arm based on the controller
+	CameraBoom->TargetArmLength = 800.0f; 
+	CameraBoom->bUsePawnControlRotation = false; // Rotate the arm based on the controller
+	CameraBoom->SetRelativeRotation(FRotator(-50.f, 0.f, 0.f));
 
 	// Create a follow camera
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
@@ -45,7 +49,7 @@ AECCharacterPlayer::AECCharacterPlayer()
 	// 입력
 	{
 		static ConstructorHelpers::FObjectFinder<UInputMappingContext>
-			InputMappingRef(TEXT("/Script/EnhancedInput.InputMappingContext'/Game/ECPlayer/Input/IMC_Default.IMC_Default'"));
+			InputMappingRef(TEXT("/Script/EnhancedInput.InputMappingContext'/Game/ECPlayer/Input/IMC_Quater.IMC_Quater'"));
 
 		if (InputMappingRef.Object)
 		{
@@ -53,21 +57,15 @@ AECCharacterPlayer::AECCharacterPlayer()
 		}
 		
 		static ConstructorHelpers::FObjectFinder<UInputAction>
-			InputMoveRef(TEXT("/Script/EnhancedInput.InputAction'/Game/ECPlayer/Input/Actions/IA_Move.IA_Move'"));
+			InputMoveRef(TEXT("/Script/EnhancedInput.InputAction'/Game/ECPlayer/Input/Actions/IA_Quater_Move.IA_Quater_Move'"));
 
 		if (InputMoveRef.Object)
 		{
 			MoveAction = InputMoveRef.Object;
 		}
-		
-		static ConstructorHelpers::FObjectFinder<UInputAction>
-			InputLookRef(TEXT("/Script/EnhancedInput.InputAction'/Game/ECPlayer/Input/Actions/IA_Look.IA_Look'"));
-
-		if (InputLookRef.Object)
-		{
-			LookAction = InputLookRef.Object;
-		}
 	}
+
+	CurrentCharacterControlType = ECharacterControlType::Quater;
 }
 
 void AECCharacterPlayer::BeginPlay()
@@ -75,18 +73,31 @@ void AECCharacterPlayer::BeginPlay()
 	// Call the base class  
 	Super::BeginPlay();
 
-	// Add Input Mapping Context
-	if (AECPlayerController* PlayerController = Cast<AECPlayerController>(GetController()))
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
-		}
-	}
+	SetCharacterControl(CurrentCharacterControlType);
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Input
+void AECCharacterPlayer::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	UpdateLookController();
+}
+
+void AECCharacterPlayer::UpdateLookController()
+{
+	// 마우스 위치 가져오기
+	FHitResult HitResult;
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (PlayerController && PlayerController->GetHitResultUnderCursor(ECC_Visibility, false, HitResult))
+	{
+		FVector AimDirection = HitResult.ImpactPoint - GetActorLocation();
+		AimDirection.Normalize();
+
+		// 캐릭터 회전
+		FRotator AimRot = AimDirection.Rotation();
+		PlayerController->SetControlRotation(AimRot);
+	}
+}
 
 void AECCharacterPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
@@ -99,9 +110,6 @@ void AECCharacterPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AECCharacterPlayer::Move);
-
-		// Looking
-		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AECCharacterPlayer::Look);
 	}
 	else
 	{
@@ -109,27 +117,78 @@ void AECCharacterPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	}
 }
 
+
+void AECCharacterPlayer::ChangeCharacterControl()
+{
+	if (CurrentCharacterControlType == ECharacterControlType::Quater)
+		SetCharacterControl(ECharacterControlType::Quater);
+}
+
+void AECCharacterPlayer::SetCharacterControl(ECharacterControlType NewControlType)
+{
+	UECPlayerControlData* NewCharacterControl = CharacterControlManager[NewControlType];
+	check(NewCharacterControl);
+
+	SetCharacterControlData(NewCharacterControl);
+
+	// Add Input Mapping Context
+	if (AECPlayerController* PlayerController = Cast<AECPlayerController>(GetController()))
+	{
+		PlayerController->bShowMouseCursor = true;
+
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+		{
+			Subsystem->ClearAllMappings();
+
+			UInputMappingContext* NewMappingContext = NewCharacterControl->InputMappingContext;
+			if(NewMappingContext)
+				Subsystem->AddMappingContext(NewMappingContext, 0);
+		}
+	}
+}
+
+
+void AECCharacterPlayer::SetCharacterControlData(const UECPlayerControlData* CharacterControlData)
+{
+	Super::SetCharacterControlData(CharacterControlData);
+
+	// 컨트롤 데이터 에셋 적용
+	CameraBoom->SetRelativeRotation(CharacterControlData->RelativeRotation);
+	CameraBoom->TargetArmLength			= CharacterControlData->TargetArmLength;
+	CameraBoom->bUsePawnControlRotation = CharacterControlData->bUsePawnControlRotation;
+	CameraBoom->bInheritPitch			= CharacterControlData->bInheritPitch;
+	CameraBoom->bInheritYaw				= CharacterControlData->bInheritYaw;
+	CameraBoom->bInheritRoll			= CharacterControlData->bInheritRoll;
+	CameraBoom->bDoCollisionTest		= CharacterControlData->bDoCollisionTest;
+}
+
 void AECCharacterPlayer::Move(const FInputActionValue& Value)
 {
 	// input is a Vector2D
-	FVector2D MovementVector = Value.Get<FVector2D>();
+	//FVector2D MovementVector = Value.Get<FVector2D>();
 
-	if (Controller != nullptr)
-	{
-		// find out which way is forward
-		const FRotator Rotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
+	//float InputSizeSquared = MovementVector.SquaredLength();
+	//float MovementVectorSize = 1.0f;
+	//float MovementVectorSizeSquared = MovementVector.SquaredLength();
+	//if (MovementVectorSizeSquared > 1.0f)
+	//{
+	//	MovementVector.Normalize();
+	//	MovementVectorSizeSquared = 1.0f;
+	//}
+	//else
+	//{
+	//	MovementVectorSize = FMath::Sqrt(MovementVectorSizeSquared);
+	//}
 
-		// get forward vector
-		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-	
-		// get right vector 
-		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+	//FVector MoveDirection = FVector(MovementVector.X, MovementVector.Y, 0.f);
+	//GetController()->SetControlRotation(FRotationMatrix::MakeFromX(MoveDirection).Rotator());
+	//AddMovementInput(MoveDirection, MovementVectorSize);
 
-		// add movement 
-		AddMovementInput(ForwardDirection, MovementVector.X);
-		AddMovementInput(RightDirection, MovementVector.Y);
-	}
+
+	FVector	Axis = Value.Get<FVector>();
+	AddMovementInput(Axis.XAxisVector, Axis.X);
+	AddMovementInput(Axis.YAxisVector, Axis.Y);
+	//mPlayerController->SetControlRotation(mAimRot);
 }
 
 void AECCharacterPlayer::Look(const FInputActionValue& Value)
