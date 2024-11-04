@@ -64,13 +64,20 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	UInputAction* MoveAction;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	UInputAction* RunAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	UInputAction* AttackAction;
+
 	ECharacterControlType  CurrentCharacterControlType;
 
-	/** Called for movement input */
 	void Move(const FInputActionValue& Value);
-
-	/** Called for looking input */
 	void Look(const FInputActionValue& Value);
+	void Run(const FInputActionValue& Value);
+	void RunStop(const FInputActionValue& Value);
+	void Attack(const FInputActionValue& Value);
+	void AttackStop(const FInputActionValue& Value);
 
 
 };

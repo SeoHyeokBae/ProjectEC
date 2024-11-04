@@ -12,9 +12,6 @@
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
-//////////////////////////////////////////////////////////////////////////
-// AECCharacterPlayer
-
 AECCharacterPlayer::AECCharacterPlayer()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -28,8 +25,8 @@ AECCharacterPlayer::AECCharacterPlayer()
 
 	// Create a follow camera
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
-	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
-	FollowCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
+	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
+	FollowCamera->bUsePawnControlRotation = false;
 
 	GetMesh()->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -100.f), FRotator(0.f, -90.f, 0.f));
 	GetMesh()->SetCollisionProfileName("CharacterMesh");
@@ -46,7 +43,7 @@ AECCharacterPlayer::AECCharacterPlayer()
 		GetMesh()->SetAnimInstanceClass(AnimRef.Class);
 	}
 
-	// 입력
+#pragma region InputAction
 	{
 		static ConstructorHelpers::FObjectFinder<UInputMappingContext>
 			InputMappingRef(TEXT("/Script/EnhancedInput.InputMappingContext'/Game/ECPlayer/Input/IMC_Quater.IMC_Quater'"));
@@ -63,14 +60,30 @@ AECCharacterPlayer::AECCharacterPlayer()
 		{
 			MoveAction = InputMoveRef.Object;
 		}
+
+		static ConstructorHelpers::FObjectFinder<UInputAction>
+			InputRunRef(TEXT("/Script/EnhancedInput.InputAction'/Game/ECPlayer/Input/Actions/IA_Run.IA_Run'"));
+
+		if (InputRunRef.Object)
+		{
+			RunAction = InputRunRef.Object;
+		}
+
+		static ConstructorHelpers::FObjectFinder<UInputAction>
+			InputAttackRef(TEXT("/Script/EnhancedInput.InputAction'/Game/ECPlayer/Input/Actions/IA_Attack.IA_Attack'"));
+
+		if (InputAttackRef.Object)
+		{
+			AttackAction = InputAttackRef.Object;
+		}
 	}
+#pragma endregion
 
 	CurrentCharacterControlType = ECharacterControlType::Quater;
 }
 
 void AECCharacterPlayer::BeginPlay()
 {
-	// Call the base class  
 	Super::BeginPlay();
 
 	SetCharacterControl(CurrentCharacterControlType);
@@ -101,22 +114,21 @@ void AECCharacterPlayer::UpdateLookController()
 
 void AECCharacterPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) 
 	{
 		// Jumping
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
-
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AECCharacterPlayer::Move);
-	}
-	else
-	{
-		UE_LOG(LogTemplateCharacter, Error, TEXT("'%s' Failed to find an Enhanced Input component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
+		// Run
+		EnhancedInputComponent->BindAction(RunAction, ETriggerEvent::Started, this, &AECCharacterPlayer::Run);
+		EnhancedInputComponent->BindAction(RunAction, ETriggerEvent::Completed, this, &AECCharacterPlayer::RunStop);
+		// Attack
+		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Triggered, this, &AECCharacterPlayer::Attack);
+		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Completed, this, &AECCharacterPlayer::AttackStop);
 	}
 }
-
 
 void AECCharacterPlayer::ChangeCharacterControl()
 {
@@ -134,6 +146,11 @@ void AECCharacterPlayer::SetCharacterControl(ECharacterControlType NewControlTyp
 	// Add Input Mapping Context
 	if (AECPlayerController* PlayerController = Cast<AECPlayerController>(GetController()))
 	{
+		// 마우스 화면 가두기
+		FInputModeGameAndUI InputMode;
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::LockAlways);
+		PlayerController->SetInputMode(InputMode);
+
 		PlayerController->bShowMouseCursor = true;
 
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
@@ -146,7 +163,6 @@ void AECCharacterPlayer::SetCharacterControl(ECharacterControlType NewControlTyp
 		}
 	}
 }
-
 
 void AECCharacterPlayer::SetCharacterControlData(const UECPlayerControlData* CharacterControlData)
 {
@@ -162,29 +178,9 @@ void AECCharacterPlayer::SetCharacterControlData(const UECPlayerControlData* Cha
 	CameraBoom->bDoCollisionTest		= CharacterControlData->bDoCollisionTest;
 }
 
+#pragma region InputFunction
 void AECCharacterPlayer::Move(const FInputActionValue& Value)
 {
-	// input is a Vector2D
-	//FVector2D MovementVector = Value.Get<FVector2D>();
-
-	//float InputSizeSquared = MovementVector.SquaredLength();
-	//float MovementVectorSize = 1.0f;
-	//float MovementVectorSizeSquared = MovementVector.SquaredLength();
-	//if (MovementVectorSizeSquared > 1.0f)
-	//{
-	//	MovementVector.Normalize();
-	//	MovementVectorSizeSquared = 1.0f;
-	//}
-	//else
-	//{
-	//	MovementVectorSize = FMath::Sqrt(MovementVectorSizeSquared);
-	//}
-
-	//FVector MoveDirection = FVector(MovementVector.X, MovementVector.Y, 0.f);
-	//GetController()->SetControlRotation(FRotationMatrix::MakeFromX(MoveDirection).Rotator());
-	//AddMovementInput(MoveDirection, MovementVectorSize);
-
-
 	FVector	Axis = Value.Get<FVector>();
 	AddMovementInput(Axis.XAxisVector, Axis.X);
 	AddMovementInput(Axis.YAxisVector, Axis.Y);
@@ -203,3 +199,27 @@ void AECCharacterPlayer::Look(const FInputActionValue& Value)
 		AddControllerPitchInput(LookAxisVector.Y);
 	}
 }
+
+void AECCharacterPlayer::Run(const FInputActionValue& Value)
+{
+	GetCharacterMovement()->MaxWalkSpeed = 500.f;
+}
+
+void AECCharacterPlayer::RunStop(const FInputActionValue& Value)
+{
+	GetCharacterMovement()->MaxWalkSpeed = 250.f;
+}
+
+void AECCharacterPlayer::Attack(const FInputActionValue& Value)
+{
+	GetCharacterMovement()->bUseControllerDesiredRotation = true;
+	GetCharacterMovement()->bOrientRotationToMovement = false;
+	//GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Blue, TEXT("Fire"));
+}
+
+void AECCharacterPlayer::AttackStop(const FInputActionValue& Value)
+{
+	GetCharacterMovement()->bUseControllerDesiredRotation = false;
+	GetCharacterMovement()->bOrientRotationToMovement = true;
+}
+#pragma endregion
